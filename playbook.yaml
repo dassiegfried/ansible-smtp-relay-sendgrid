@@ -1,0 +1,119 @@
+- name: Get PIs setup with SMTP relay capabilitys
+  hosts: pis
+  become: true
+  tasks:
+   - name: install smtp packages
+     ansible.builtin.apt:
+      pkg: 
+        - libsasl2-modules 
+        - postfix
+      state: present
+   - name: set postconf relayhost
+     postconf: 
+      name: relayhost
+      value: "[smtp.sendgrid.net]:587"
+      state: present
+
+   - name: set postconf inet_protocols
+     postconf: 
+      name: inet_protocols    
+      value: ipv4
+      state: present
+
+   - name: set postconf smtp_tls_security_level
+     postconf: 
+      name: smtp_tls_security_level   
+      value: encrypt
+      state: present
+
+   - name: set postconf header_size_limit
+     postconf: 
+      name: header_size_limit    
+      value: 4096000
+      state: present
+
+   - name: set postconf smtp_use_tls
+     postconf: 
+      name: smtp_use_tls  
+      value: "yes"
+      state: present
+
+   - name: set postconf smtp_enforce_tls
+     postconf: 
+      name: smtp_enforce_tls  
+      value: "yes"
+      state: present
+
+   - name: set postconf smtp_sasl_auth_enable
+     postconf: 
+      name: smtp_sasl_auth_enable 
+      value: "yes"
+      state: present
+
+   - name: set postconf smtp_sasl_security_options
+     postconf: 
+      name: smtp_sasl_security_options  
+      value: noanonymous
+      state: present
+
+   - name: set postconf smtp_sasl_tls_security_options
+     postconf: 
+      name: smtp_sasl_tls_security_options   
+      value: noanonymous
+      state: present
+
+
+   - name: set postconf password_maps  
+     postconf: 
+      name: smtp_sasl_password_maps  
+      value: hash:/etc/postfix/sasl_passwd
+      state: present
+
+   - name: set postconf sender_canonical_maps   
+     postconf: 
+      name: sender_canonical_maps   
+      value: hash:/etc/postfix/sender_canonical
+      state: absent
+
+   - name: set postconf smtp_generic_maps    
+     postconf: 
+      name: smtp_generic_maps    
+      value: hash:/etc/postfix/generic
+      state: absent
+
+   - name: Creating password file
+     copy:
+       dest: "/etc/postfix/sasl_passwd"
+       content: 
+        smtp.sendgrid.net apikey:{{ sendgird_api_key }}
+
+   - name: Change file ownership, group and permissions for /etc/postfix/sasl_passwd
+     ansible.builtin.file:
+       path: /etc/postfix/sasl_passwd
+       owner: root
+       group: root
+       mode: '0600'
+
+   - name: do postmap postfix
+     ansible.builtin.shell: postmap /etc/postfix/sasl_passwd
+
+   - name: Creating alias file
+     copy:
+       dest: "/etc/postfix/generic"
+       content: ""
+
+   - name: Template a file to /etc/aliases
+     ansible.builtin.template:
+       src: ./templates/aliases.j2
+       dest: /etc/aliases
+
+   - name: do postmap generic
+     ansible.builtin.shell: newaliases 
+
+   - name: do postmap generic
+     ansible.builtin.shell: postmap /etc/postfix/generic
+
+   - name: Restart service postfix, in all cases
+     ansible.builtin.service:
+       name: postfix
+       state: restarted
